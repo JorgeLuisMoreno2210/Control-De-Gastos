@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de Gastos</title>
+<style>
+:root{--bg:#f5f7f6;--sf:#fff;--tx:#12201b;--mu:#5d6e67;--bd:#dbe3df;--ac:#0b6b52;--wa:#a35a00;--er:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1512;--sf:#16201c;--tx:#e8f0ec;--mu:#97a89f;--bd:#26342e;--ac:#3fc59a;--wa:#e3a04a;--er:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+.w{max-width:1000px;margin:0 auto;padding:0 20px 40px}
+header{background:var(--sf);border-bottom:1px solid var(--bd);margin-bottom:24px}
+header .w{display:flex;justify-content:space-between;align-items:center;height:64px;padding-bottom:0}
+.logo{font-weight:700;font-size:20px}.logo b{color:var(--ac)}
+h2{font-size:18px;margin:0 0 14px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:20px}
+.top{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-bottom:18px}
+.total{flex:1;min-width:220px}.total .c{color:var(--mu);font-size:14px}.total .v{font-size:32px;font-weight:700;letter-spacing:-.5px}
+label{display:block;font-size:14px;font-weight:600;margin:0 0 6px}
+input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+input:focus,select:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--ac);outline-offset:1px}
+button,.btn{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--bd);background:var(--sf);color:var(--tx);padding:10px 14px;font-weight:600;text-decoration:none;display:inline-block}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff}
+@media (prefers-color-scheme:dark){button.p{color:#06231b}}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:18px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.f{display:grid;gap:14px}.f .r{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.msg{min-height:22px;font-size:14px;margin-top:10px}.msg.er{color:var(--er)}.msg.ok{color:var(--ac)}
+.cat{margin:14px 0}.cat .t{display:flex;justify-content:space-between;font-size:14px;gap:8px;flex-wrap:wrap}
+.bar{height:10px;border-radius:6px;background:var(--bd);overflow:hidden;margin:6px 0 4px}
+.bar i{display:block;height:100%;background:var(--ac)}.bar i.cerca{background:var(--wa)}.bar i.excedido{background:var(--er)}
+.cat button{font-size:13px;padding:4px 10px}
+.mu{color:var(--mu);font-size:13px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px;min-width:420px}
+th{text-align:left;color:var(--mu);padding:8px 6px;border-bottom:1px solid var(--bd)}td{padding:10px 6px;border-bottom:1px solid var(--bd)}
+td.n{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+td button{padding:4px 10px;font-size:13px}
+.empty{padding:22px;text-align:center;color:var(--mu)}
+</style>
+</head>
+<body>
+<header><div class="w"><div class="logo">Control de <b>Gastos</b></div><span class="mu">Tus datos se guardan solo en este equipo</span></div></header>
+<main class="w">
+<div class="top">
+ <div class="card total"><div class="c">Total gastado en el mes</div><div class="v" id="total">—</div></div>
+ <div><label for="mes">Mes</label><input id="mes" type="month"></div>
+ <a class="btn" id="exp" href="#">Descargar en Excel (CSV)</a>
+</div>
+<div class="grid">
+ <section class="card" aria-labelledby="h1">
+  <h2 id="h1">Anotar un gasto</h2>
+  <form id="f" class="f" novalidate>
+   <div class="r"><div><label for="fecha">Fecha</label><input id="fecha" type="date" required></div>
+   <div><label for="monto">Monto</label><input id="monto" inputmode="decimal" placeholder="15000" required></div></div>
+   <div><label for="cat">Categoría</label><select id="cat"></select></div>
+   <div><label for="desc">Descripción (opcional)</label><input id="desc" maxlength="120" placeholder="Almuerzo con el equipo"></div>
+   <button class="p" type="submit">Guardar gasto</button>
+  </form>
+  <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  <h2 style="margin-top:22px">Presupuesto por categoría</h2>
+  <div id="cats"></div>
+ </section>
+ <section class="card" aria-labelledby="h2">
+  <h2 id="h2">Movimientos del mes</h2>
+  <div class="tw"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Detalle</th><th style="text-align:right">Monto</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
+  <div class="empty" id="em">No hay gastos en este mes. Anota el primero a la izquierda.</div>
+ </section>
+</div>
+</main>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var mon=new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+function msg(t,k){var m=$("msg");m.className="msg "+(k||"");m.textContent=t}
+function el(tag,txt,cls){var e=document.createElement(tag);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;return e}
+async function api(url,op){
+ var r=await fetch(url,op),d=await r.json();
+ if(!r.ok)throw new Error(d.error||"Algo salió mal.");return d;
+}
+function envio(o){return {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}}
+async function cargar(){
+ var mes=$("mes").value;$("exp").href="/api/exportar?mes="+mes;
+ try{
+  var r=await api("/api/resumen?mes="+mes),g=await api("/api/gastos?mes="+mes);
+  $("total").textContent=mon.format(r.total);
+  var box=$("cats");box.textContent="";
+  r.categorias.forEach(function(c){
+   var d=el("div",null,"cat"),t=el("div",null,"t");
+   t.appendChild(el("strong",c.categoria));
+   t.appendChild(el("span",mon.format(c.gastado)+(c.limite?" de "+mon.format(c.limite):"")));
+   var b=el("div",null,"bar"),i=el("i",null,c.estado||"");i.style.width=Math.min(100,c.porcentaje||0)+"%";b.appendChild(i);
+   var f=el("div",null,"mu");
+   var txt=!c.limite?"Sin presupuesto":c.estado==="excedido"?"Te pasaste por "+mon.format(c.gastado-c.limite):c.estado==="cerca"?"Cerca del límite ("+c.porcentaje+" %)":"Vas bien ("+c.porcentaje+" %)";
+   f.appendChild(document.createTextNode(txt+" · "));
+   var bt=el("button",c.limite?"Cambiar":"Fijar presupuesto");bt.type="button";
+   bt.onclick=function(){presupuesto(c.categoria,c.limite)};f.appendChild(bt);
+   d.append(t,b,f);box.appendChild(d);
+  });
+  var tb=$("tb");tb.textContent="";$("em").style.display=g.length?"none":"block";
+  g.forEach(function(x){
+   var tr=document.createElement("tr");
+   tr.append(el("td",x.fecha),el("td",x.categoria),el("td",x.descripcion||"—"),el("td","−"+mon.format(x.monto),"n"));
+   var td=document.createElement("td"),bt=el("button","Eliminar");bt.type="button";bt.setAttribute("aria-label","Eliminar gasto de "+mon.format(x.monto));
+   bt.onclick=function(){eliminar(x.id)};td.appendChild(bt);tr.appendChild(td);tb.appendChild(tr);
+  });
+ }catch(e){msg(e.message,"er")}
+}
+async function presupuesto(cat,actual){
+ var v=prompt("Presupuesto mensual para "+cat+" (escribe 0 para quitarlo):",actual||"");
+ if(v===null)return;
+ try{await api("/api/presupuestos",envio({categoria:cat,monto:v}));msg("Presupuesto guardado.","ok");cargar()}catch(e){msg(e.message,"er")}
+}
+async function eliminar(id){
+ if(!confirm("¿Eliminar este gasto? No se puede deshacer."))return;
+ try{await api("/api/gastos/"+id,{method:"DELETE"});msg("Gasto eliminado.","ok");cargar()}catch(e){msg(e.message,"er")}
+}
+$("f").addEventListener("submit",async function(ev){
+ ev.preventDefault();
+ try{
+  var g=await api("/api/gastos",envio({fecha:$("fecha").value,monto:$("monto").value,categoria:$("cat").value,descripcion:$("desc").value}));
+  msg("Gasto guardado: "+mon.format(g.monto)+" en "+g.categoria+".","ok");
+  $("monto").value="";$("desc").value="";$("mes").value=g.fecha.slice(0,7);$("monto").focus();cargar();
+ }catch(e){msg(e.message,"er")}
+});
+$("mes").addEventListener("change",cargar);
+(async function(){
+ var hoy=new Date(),p=function(n){return String(n).padStart(2,"0")};
+ $("fecha").value=hoy.getFullYear()+"-"+p(hoy.getMonth()+1)+"-"+p(hoy.getDate());
+ $("mes").value=$("fecha").value.slice(0,7);
+ try{(await api("/api/categorias")).forEach(function(c){$("cat").appendChild(el("option",c))})}catch(e){msg(e.message,"er")}
+ cargar();
+})();
+})();
+</script>
+</body>
+</html>
